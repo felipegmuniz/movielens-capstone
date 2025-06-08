@@ -48,7 +48,7 @@ final_holdout_test <- movielens[test_index, ] %>%
   semi_join(edx, by = "userId")
 ```
 
-The MovieLens 10M dataset is provided in two separate files: one containing the user-generated ratings and the other listing the movies along with their titles and genres. In order to build a meaningful training set, both files need to be merged. By inspecting the column names and observing that both files share a variable named `movieId`, it was determined that this field serves as the key for joining the datasets. This ensures that each rating is associated with the correct movie information.
+The MovieLens 10M dataset is provided in two separate files: one containing the user-generated ratings and the other listing the movies along with their titles and genres. In order to build a meaningful training set, both files need to be merged. By inspecting the column names and observing that both files share a variable named `movieId`, it was determined that this field serves as the key for joining the datasets. This ensures that each rating is associated with the correct movie information (Table 1).
 
 ```{r show-merged-data-kable}
 knitr::kable(head(movielens), caption = "Table 1: Sample of the merged MovieLens dataset")
@@ -61,7 +61,7 @@ To better understand the structure and quality of the dataset, a few exploratory
 
 ### Distribution of Ratings
 
-This plot reveals that most ratings tend to cluster around 4, 3, and 5 stars respectively, indicating a right-skewed distribution with a tendency for favorable evaluations.
+The histogram on figure 1 reveals that most ratings tend to cluster around 4, 3, and 5 stars respectively, indicating a right-skewed distribution with a tendency for favorable evaluations.
 
 ```{r plot-rating-dist}
 edx %>%
@@ -77,7 +77,7 @@ edx %>%
 
 ### Rating Counts per Movie
 
-This log-scaled plot shows the number of ratings each movie received. A small subset of movies gathers a large number of ratings, while most movies are rated fewer times.
+This log-scaled plot (figure 2) shows the number of ratings each movie received. A small subset of movies gathers a large number of ratings, while most movies are rated fewer times.
 
 ```{r plot-ratings-per-movie}
 edx %>%
@@ -94,7 +94,7 @@ edx %>%
 
 ### Rating Counts per User
 
-This plot presents how many ratings each user submitted. Like the movie plot, it is highly skewed, with a few highly active users and many low-activity users.
+The following plot presents how many ratings each user submitted. Like the movie plot, it is highly skewed, with a few highly active users and many low-activity users (figure 3).
 
 ```{r plot-ratings-per-user}
 edx %>%
@@ -196,7 +196,12 @@ rmse_results <- bind_rows(rmse_results,
 # Results and Interpretation
 
 ```{r rmse-results}
-print(rmse_results)
+# Display RMSE results table with a caption
+knitr::kable(
+  rmse_results,
+  caption = "Table 2: RMSE comparison across models, from the baseline to progressively refined versions.",
+  digits = 6
+)
 ```
 
 The naive model resulted in an RMSE of approximately 1.06. Introducing movie-specific effects reduced this to around 0.94, and including user effects brought the RMSE further down to about 0.865. Intuitively, this progression is expected: as the number of relevant predictors increases, the model becomes more capable of narrowing the gap between predicted and observed values. Each modeling step contributed to measurable improvements in accuracy.
@@ -225,7 +230,10 @@ Future iterations could benefit from more advanced techniques such as regulariza
 # References
 
 1. Kassambara, A. (2018). *Machine Learning Essentials: Practical Guide in R*. STHDA.  
-2. Ozdemir, S. (2016). *Principles of Data Science*. Packt Publishing (p. 226).  
+
+2. Ozdemir, S. (2016). *Principles of Data Science*. Packt Publishing (p. 226).
+
 3. Irizarry, R. A. (2023). *Introduction to Data Science: Data Analysis and Prediction Algorithms with R*. http://rafalab.dfci.harvard.edu/dsbook/large-datasets.html
+
 4. Ricci, F., Rokach, L., & Shapira, B. (2015). *Recommender Systems Handbook*. Springer (Chapter 5).
 
