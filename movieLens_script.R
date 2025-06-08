@@ -1,10 +1,11 @@
-# File: MovieLens_script.R
-# Description: Script to train models, generate predictions, and calculate RMSE
+# movieLens_script.R
+# Author: Felipe Muniz
+# Description: MovieLens 10M Capstone assignment - model training, predictions, and RMSE calculation
 
-# Load necessary packages
-if(!require(tidyverse)) install.packages("tidyverse")
-if(!require(caret)) install.packages("caret")
-if(!require(data.table)) install.packages("data.table")
+# Load required packages
+if (!require(tidyverse)) install.packages("tidyverse", dependencies = TRUE)
+if (!require(caret)) install.packages("caret", dependencies = TRUE)
+if (!require(data.table)) install.packages("data.table", dependencies = TRUE)
 
 library(tidyverse)
 library(caret)
@@ -13,7 +14,10 @@ library(data.table)
 # Set seed for reproducibility
 set.seed(1, sample.kind = "Rounding")
 
-# Download and prepare the data
+# Download and prepare MovieLens 10M dataset
+# https://grouplens.org/datasets/movielens/10m/
+# http://files.grouplens.org/datasets/movielens/ml-10m.zip
+
 dl <- tempfile()
 download.file("http://files.grouplens.org/datasets/movielens/ml-10m.zip", dl)
 
@@ -27,69 +31,109 @@ movies$movieId <- as.numeric(movies$movieId)
 
 movielens <- left_join(ratings, movies, by = "movieId")
 
-# Split edx and final hold-out test set
+# Create edx and final holdout test sets
 test_index <- createDataPartition(y = movielens$rating, times = 1, p = 0.1, list = FALSE)
 edx <- movielens[-test_index, ]
 final_holdout_test <- movielens[test_index, ] %>%
   semi_join(edx, by = "movieId") %>%
   semi_join(edx, by = "userId")
 
-# Clean up
 rm(dl, ratings, movies, test_index, movielens)
 
-# Create a training and validation set from edx
+# Create training and validation sets from edx
 set.seed(1, sample.kind = "Rounding")
-index <- createDataPartition(y = edx$rating, times = 1, p = 0.1, list = FALSE)
-train_set <- edx[-index, ]
-temp <- edx[index, ]
+train_index <- createDataPartition(edx$rating, times = 1, p = 0.1, list = FALSE)
+train_set <- edx[-train_index, ]
+temp <- edx[train_index, ]
 
-# Ensure userId and movieId in validation are also in training set
 validation <- temp %>%
   semi_join(train_set, by = "movieId") %>%
   semi_join(train_set, by = "userId")
+
 train_set <- train_set %>%
   semi_join(validation, by = "movieId") %>%
   semi_join(validation, by = "userId")
 
-# Define RMSE function
-RMSE <- function(true_ratings, predicted_ratings) {
-  sqrt(mean((true_ratings - predicted_ratings)^2))
+# Define RMSE function (quick helper)
+rmse <- function(actual, predicted) {
+  sqrt(mean((actual - predicted)^2))
 }
 
-# Naive Model
-mu_hat <- mean(train_set$rating)
-naive_rmse <- RMSE(validation$rating, mu_hat)
-rmse_results <- tibble(method = "Naive Mean Model", RMSE = naive_rmse)
+# Baseline/Naive Model
+global_avg <- mean(train_set$rating)  # overall average
+naive_preds <- rep(global_avg, nrow(validation))
+naive_rmse <- rmse(validation$rating, naive_preds)
+
+results <- data.frame(
+  Method = "Naive Average",
+  RMSE = naive_rmse
+)
 
 # Movie Effect Model
-movie_avgs <- train_set %>%
+# Estimates how each movie deviates from the global average
+movie_bias <- train_set %>%
   group_by(movieId) %>%
-  summarize(b_i = mean(rating - mu_hat))
-predicted_ratings <- validation %>%
-  left_join(movie_avgs, by = "movieId") %>%
-  mutate(pred = mu_hat + b_i) %>%
-  pull(pred)
-movie_rmse <- RMSE(validation$rating, predicted_ratings)
-rmse_results <- bind_rows(rmse_results,
-                          tibble(method = "Movie Effect Model", RMSE = movie_rmse))
+  summarize(movie_effect = mean(rating - global_avg))
 
-# Movie + User Effects Model
-user_avgs <- train_set %>%
-  left_join(movie_avgs, by = "movieId") %>%
+validation_with_movie <- validation %>%
+  left_join(movie_bias, by = "movieId")
+
+validation_with_movie <- validation_with_movie %>%
+  mutate(pred = global_avg + movie_effect)
+
+movie_rmse <- rmse(validation_with_movie$rating, validation_with_movie$pred)
+
+results <- rbind(results, data.frame(
+  Method = "Movie Effect Model",
+  RMSE = movie_rmse
+))
+
+# Movie + User Effects Model 
+# Estimates how each user deviates after accounting for movie effect
+user_bias <- train_set %>%
+  left_join(movie_bias, by = "movieId") %>%
   group_by(userId) %>%
-  summarize(b_u = mean(rating - mu_hat - b_i))
-predicted_ratings <- validation %>%
-  left_join(movie_avgs, by = "movieId") %>%
-  left_join(user_avgs, by = "userId") %>%
-  mutate(pred = mu_hat + b_i + b_u) %>%
+  summarize(user_effect = mean(rating - global_avg - movie_effect))
+
+validation_with_all <- validation_with_movie %>%
+  left_join(user_bias, by = "userId") %>%
+  mutate(pred = global_avg + movie_effect + user_effect)
+
+user_rmse <- rmse(validation_with_all$rating, validation_with_all$pred)
+
+results <- rbind(results, data.frame(
+  Method = "Movie + User Effect Model",
+  RMSE = user_rmse
+))
+
+# Show RMSE results
+print(results)
+
+# Final Evaluation on Hold-Out Test Set
+# Recalculate biases using full edx dataset
+global_avg_edx <- mean(edx$rating)
+
+movie_bias_edx <- edx %>%
+  group_by(movieId) %>%
+  summarize(movie_effect = mean(rating - global_avg_edx))
+
+user_bias_edx <- edx %>%
+  left_join(movie_bias_edx, by = "movieId") %>%
+  group_by(userId) %>%
+  summarize(user_effect = mean(rating - global_avg_edx - movie_effect))
+
+# Generate predictions
+final_predictions <- final_holdout_test %>%
+  left_join(movie_bias_edx, by = "movieId") %>%
+  left_join(user_bias_edx, by = "userId") %>%
+  mutate(pred = global_avg_edx + movie_effect + user_effect) %>%
   pull(pred)
-user_rmse <- RMSE(validation$rating, predicted_ratings)
-rmse_results <- bind_rows(rmse_results,
-                          tibble(method = "Movie + User Effects Model", RMSE = user_rmse))
 
-# Display RMSE results
-print(rmse_results)
+# Replace NAs (for unseen movieId or userId) with global average
+final_predictions[is.na(final_predictions)] <- global_avg_edx
 
-# At this point, you would continue with regularization and/or matrix factorization
-# and then apply the final model to final_holdout_test and report the RMSE
+final_rmse <- rmse(final_holdout_test$rating, final_predictions)
+
+# Show result
+cat(sprintf("\nFinal RMSE on Hold-Out Test Set: %.5f\n", final_rmse))
 
