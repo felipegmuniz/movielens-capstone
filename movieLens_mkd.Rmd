@@ -15,13 +15,16 @@ library(ggplot2)
 
 # Introduction
 
-This capstone project, part of the HarvardX PH125.9x Data Science Professional Certificate, aims to construct a movie recommendation system based on the MovieLens 10M dataset. The objective is to apply statistical modeling techniques to predict user ratings as accurately as possible, with performance measured by Root Mean Square Error (RMSE). The document presents each modeling step clearly and methodically, using a training and validation dataset derived from the provided edx set, and withholding the final_holdout_test dataset for final evaluation only.
+This capstone project, part of the HarvardX PH125.9x Data Science Professional Certificate, aims to construct a movie recommendation system based on the MovieLens 10M dataset. The objective is to apply statistical modeling techniques to predict user ratings as accurately as possible, with performance measured by Root Mean Square Error (RMSE). The document presents each modeling step clearly and methodically, using a training and validation dataset derived from the provided edx set, and leaving the final_holdout_test dataset for final evaluation only.
 
 # Methods and Analysis
 
+The modeling process presented here begins with the development of a simple baseline model that assumes all user ratings can be predicted using the global average. From there, additional predictors are introduced to gradually improve predictive accuracy—starting with movie-specific effects and then incorporating user-specific tendencies. Each model is evaluated using a validation set derived from the training data, with performance measured by the Root Mean Squared Error (RMSE). Before proceeding to the models, a brief exploratory data analysis is conducted through visualizations to better understand the structure of the data, its distributions, and potential irregularities.
+
 ## Data Acquisition and Preparation
 
-The dataset is downloaded and decompressed directly from the official GroupLens repository. It includes two primary files: one with user ratings and another with movie titles and genres. These files are merged using the `movieId` as a common key.
+The dataset is downloaded and decompressed directly from the official GroupLens repository. It includes two primary files: one with user ratings and another with movie titles and genres.
+
 
 ```{r data-prep}
 dl <- tempfile()
@@ -45,7 +48,14 @@ final_holdout_test <- movielens[test_index, ] %>%
   semi_join(edx, by = "userId")
 ```
 
-## Exploratory Data Analysis
+The MovieLens 10M dataset is provided in two separate files: one containing the user-generated ratings and the other listing the movies along with their titles and genres. In order to build a meaningful training set, both files need to be merged. By inspecting the column names and observing that both files share a variable named `movieId`, it was determined that this field serves as the key for joining the datasets. This ensures that each rating is associated with the correct movie information.
+
+```{r show-merged-data-kable}
+knitr::kable(head(movielens), caption = "Table 1: Sample of the merged MovieLens dataset")
+```
+
+
+## Exploratory Data Analysis (EDA)
 
 To better understand the structure and quality of the dataset, a few exploratory visualizations were conducted to help identify any data issues or patterns that may influence the modeling process.
 
@@ -118,7 +128,7 @@ train_set <- train_set %>%
 
 ## RMSE (Root Mean Squared Error)
 
-The Root Mean Squared Error (RMSE) is the chosen metric to evaluate the accuracy of predictions. It measures the average magnitude of prediction errors and is widely used in regression contexts due to its interpretability and sensitivity to large errors\textsuperscript{4}.
+The Root Mean Squared Error (RMSE) is the chosen metric to evaluate the accuracy of predictions. It measures the average magnitude of prediction errors and is widely used in regression and recommendation contexts due to its interpretability and sensitivity to large errors\textsuperscript{2}. RMSE is calculated by squaring the differences between predicted and actual values, averaging them, and then taking the square root. This squaring step causes RMSE to penalize larger errors more heavily than smaller ones, making it particularly effective for highlighting impactful mispredictions\textsuperscript{1}. A lower RMSE value indicates that the model’s predictions are, on average, closer to the true ratings, and is therefore preferred when comparing model performance\textsuperscript{2}.
 
 $$
 RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i - y_i)^2}
@@ -183,26 +193,15 @@ rmse_results <- bind_rows(rmse_results,
                           tibble(method = "Movie + User Effects Model", RMSE = user_rmse))
 ```
 
-### Comparison of Results
+# Results and Interpretation
 
 ```{r rmse-results}
 print(rmse_results)
 ```
 
-## Future Improvements
+The naive model resulted in an RMSE of approximately 1.06. Introducing movie-specific effects reduced this to around 0.94, and including user effects brought the RMSE further down to about 0.865. Intuitively, this progression is expected: as the number of relevant predictors increases, the model becomes more capable of narrowing the gap between predicted and observed values. Each modeling step contributed to measurable improvements in accuracy.
 
-Further improvements could be achieved by applying **regularization**, which helps prevent overfitting by shrinking large movie and user effect estimates\textsuperscript{1}. 
-Additionally, more sophisticated techniques such as **matrix factorization** (e.g., via the `recosystem` package) may uncover hidden relationships between users and movies, improving recommendation accuracy\textsuperscript{2}.
-
-# Results and Interpretation
-
-The naive model resulted in an RMSE of approximately 1.06. Introducing movie-specific effects reduced this to around 0.94, and including user effects brought the RMSE further down to about 0.865. Each modeling step demonstrated meaningful gains in predictive accuracy.
-
-# Conclusion
-
-The recommendation model was progressively refined from a naive global mean predictor to a user and movie-aware model. Exploratory analysis and model diagnostics guided the modeling process, with RMSE used to measure accuracy. Future iterations may include regularization or matrix factorization to further reduce prediction error.
-
-# Final RMSE on Hold-Out Test Set
+### Final RMSE on Hold-Out Test Set
 
 ```{r final-rmse}
 final_predictions <- final_holdout_test %>%
@@ -215,9 +214,18 @@ final_rmse <- RMSE(final_holdout_test$rating, final_predictions)
 final_rmse
 ```
 
+The final RMSE on the hold-out test set was *0.8673*, slightly above the target benchmark of *0.8649*. Although the threshold was narrowly missed, this performance still reflects solid generalization. Since the hold-out set was not used at any stage of development or tuning, the evaluation remains unbiased. This result suggests the model captures relevant patterns without severely overfitting.
+
+# Conclusion
+
+The model was refined step by step, from a naive average approach to one incorporating both movie and user-specific effects. Exploratory analysis and performance evaluation through RMSE guided the modeling process throughout. While the final result remained just above the target threshold, the overall framework proved effective and interpretable.
+
+Future iterations could benefit from more advanced techniques such as regularization, which helps reduce overfitting by penalizing large effect estimates, or matrix factorization, which may better capture latent structures in user-movie interactions\textsuperscript{4}.
+
 # References
 
-1. Kassambara, A. (2018). *Machine learning essentials*. STHDA.
-2. Ozdemir, S. (2016). *Principles of data science*. Packt Publishing Ltd.
-3. Irizarry, R. A. (2023). *Introduction to Data Science*. Retrieved from http://rafalab.dfci.harvard.edu/dsbook/large-datasets.html
-4. James, G., Witten, D., Hastie, T., & Tibshirani, R. (2013). *An Introduction to Statistical Learning*. Springer.
+1. Kassambara, A. (2018). *Machine Learning Essentials: Practical Guide in R*. STHDA.  
+2. Ozdemir, S. (2016). *Principles of Data Science*. Packt Publishing (p. 226).  
+3. Irizarry, R. A. (2023). *Introduction to Data Science: Data Analysis and Prediction Algorithms with R*. http://rafalab.dfci.harvard.edu/dsbook/large-datasets.html
+4. Ricci, F., Rokach, L., & Shapira, B. (2015). *Recommender Systems Handbook*. Springer (Chapter 5).
+
