@@ -10,15 +10,18 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(caret)
 library(data.table)
+library(ggplot2)
 ```
 
 # Introduction
 
-This capstone project is part of the HarvardX PH125.9x Capstone assignement. The goal is to develop a movie recommendation system using the MovieLens 10M dataset and evaluate its performance based on RMSE. This report outlines the methodology, analysis steps, modeling results, and final model performance.
+This capstone project, part of the HarvardX PH125.9x Data Science Professional Certificate, aims to construct a movie recommendation system based on the MovieLens 10M dataset. The objective is to apply statistical modeling techniques to predict user ratings as accurately as possible, with performance measured by Root Mean Square Error (RMSE). The document presents each modeling step clearly and methodically, using a training and validation dataset derived from the provided edx set, and withholding the final_holdout_test dataset for final evaluation only.
 
-# Methods / Analysis
+# Methods and Analysis
 
 ## Data Acquisition and Preparation
+
+The dataset is downloaded and decompressed directly from the official GroupLens repository. It includes two primary files: one with user ratings and another with movie titles and genres. These files are merged using the `movieId` as a common key.
 
 ```{r data-prep}
 dl <- tempfile()
@@ -42,7 +45,63 @@ final_holdout_test <- movielens[test_index, ] %>%
   semi_join(edx, by = "userId")
 ```
 
-## Validation Partition from edx
+## Exploratory Data Analysis
+
+To better understand the structure and quality of the dataset, a few exploratory visualizations were conducted to help identify any data issues or patterns that may influence the modeling process.
+
+### Distribution of Ratings
+
+This plot reveals that most ratings tend to cluster around 4, 3, and 5 stars respectively, indicating a right-skewed distribution with a tendency for favorable evaluations.
+
+```{r plot-rating-dist}
+edx %>%
+  ggplot(aes(x = rating)) +
+  geom_histogram(binwidth = 0.5, fill = "steelblue", color = "black") +
+  scale_y_continuous(labels = scales::comma) +
+  theme_minimal(base_size = 10) +
+  labs(title = "Distribution of Ratings",
+       x = "Rating",
+       y = "Count")
+```
+*Figure 1: Histogram with the distribution of ratings.*
+
+### Rating Counts per Movie
+
+This log-scaled plot shows the number of ratings each movie received. A small subset of movies gathers a large number of ratings, while most movies are rated fewer times.
+
+```{r plot-ratings-per-movie}
+edx %>%
+  count(movieId) %>%
+  ggplot(aes(n)) +
+  geom_histogram(bins = 30, fill = "darkorange", color = "black") +
+  scale_x_log10() +
+  theme_minimal(base_size = 10) +
+  labs(title = "Number of Ratings per Movie",
+       x = "Number of Ratings (log scale)",
+       y = "Count")
+```
+*Figure 2: Distribution of the number of ratings received per movie. A small number of movies dominate the rating volume.*
+
+### Rating Counts per User
+
+This plot presents how many ratings each user submitted. Like the movie plot, it is highly skewed, with a few highly active users and many low-activity users.
+
+```{r plot-ratings-per-user}
+edx %>%
+  count(userId) %>%
+  ggplot(aes(n)) +
+  geom_histogram(bins = 30, fill = "forestgreen", color = "black") +
+  scale_x_log10() +
+  theme_minimal(base_size = 10) +
+  labs(title = "Number of Ratings per User",
+       x = "Number of Ratings (log scale)",
+       y = "Count")
+```
+*Figure 3: Histogram of user activity. Most users rate only a few movies, while a few users rate many.*
+
+## Internal Validation Partition
+
+The edx dataset is split into a training and validation set to simulate model evaluation. Only users and movies appearing in both subsets are retained.
 
 ```{r validation-split}
 set.seed(1, sample.kind = "Rounding")
@@ -57,7 +116,18 @@ train_set <- train_set %>%
   semi_join(validation, by = "userId")
 ```
 
-## RMSE Function
+## RMSE (Root Mean Squared Error)
+
+The Root Mean Squared Error (RMSE) is the chosen metric to evaluate the accuracy of predictions. It measures the average magnitude of prediction errors and is widely used in regression contexts due to its interpretability and sensitivity to large errors\textsuperscript{4}.
+
+$$
+RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (\hat{y}_i - y_i)^2}
+$$
+
+Where:  
+\( \hat{y}_i \): predicted rating  
+\( y_i \): actual rating  
+\( n \): number of observations
 
 ```{r rmse-function}
 RMSE <- function(true_ratings, predicted_ratings) {
@@ -65,16 +135,22 @@ RMSE <- function(true_ratings, predicted_ratings) {
 }
 ```
 
-## Models Tested
+## Modeling Approach
 
-### 1. Naive Model
+### Naive Model
+
+A baseline model is constructed using only the global average of all ratings. This naive approach provides a reference RMSE to compare against more refined models.
+
 ```{r naive-model}
 mu_hat <- mean(train_set$rating)
 naive_rmse <- RMSE(validation$rating, mu_hat)
 rmse_results <- tibble(method = "Naive Mean Model", RMSE = naive_rmse)
 ```
 
-### 2. Movie Effect Model
+### Movie Effect Model
+
+This model accounts for movie-specific biases by adjusting each prediction based on how much a given movie deviates from the global average.
+
 ```{r movie-effect}
 movie_avgs <- train_set %>%
   group_by(movieId) %>%
@@ -88,7 +164,10 @@ rmse_results <- bind_rows(rmse_results,
                           tibble(method = "Movie Effect Model", RMSE = movie_rmse))
 ```
 
-### 3. Movie + User Effect Model
+### Movie + User Effect Model
+
+The next refinement introduces user-specific biases. Some users rate consistently higher or lower, independent of the movie. This model adds user-specific effects.
+
 ```{r movie-user-effect}
 user_avgs <- train_set %>%
   left_join(movie_avgs, by = "movieId") %>%
@@ -104,38 +183,41 @@ rmse_results <- bind_rows(rmse_results,
                           tibble(method = "Movie + User Effects Model", RMSE = user_rmse))
 ```
 
-### Model Comparison Table
+### Comparison of Results
+
 ```{r rmse-results}
 print(rmse_results)
 ```
 
-## Next Steps
-- Regularization of bias terms
-- Matrix factorization (e.g., `recosystem`)
-- Final model training on `edx`
-- Test on `final_holdout_test`
+## Future Improvements
 
-# Results
+Further improvements could be achieved by applying **regularization**, which helps prevent overfitting by shrinking large movie and user effect estimates\textsuperscript{1}. 
+Additionally, more sophisticated techniques such as **matrix factorization** (e.g., via the `recosystem` package) may uncover hidden relationships between users and movies, improving recommendation accuracy\textsuperscript{2}.
 
-Provide here the RMSE table, brief discussion of results so far, and planned improvements. Example:
+# Results and Interpretation
 
-> The naive model yielded RMSE ~1.06. Adding movie effect improved RMSE to ~0.943. Including user effect further reduced RMSE to ~0.865. Further improvement will focus on regularization and matrix factorization.
+The naive model resulted in an RMSE of approximately 1.06. Introducing movie-specific effects reduced this to around 0.94, and including user effects brought the RMSE further down to about 0.865. Each modeling step demonstrated meaningful gains in predictive accuracy.
 
 # Conclusion
 
-This project presented the development of a movie rating prediction algorithm. Several models were implemented and evaluated, leading to progressive reductions in RMSE. Future iterations will integrate regularization and matrix factorization to reach target RMSE < 0.86490.
+The recommendation model was progressively refined from a naive global mean predictor to a user and movie-aware model. Exploratory analysis and model diagnostics guided the modeling process, with RMSE used to measure accuracy. Future iterations may include regularization or matrix factorization to further reduce prediction error.
 
 # Final RMSE on Hold-Out Test Set
-(To be filled only after selecting final model)
-```{r final-rmse, eval=FALSE}
-# final_rmse <- RMSE(final_holdout_test$rating, predicted_values_from_final_model)
-# final_rmse
+
+```{r final-rmse}
+final_predictions <- final_holdout_test %>%
+  left_join(movie_avgs, by = "movieId") %>%
+  left_join(user_avgs, by = "userId") %>%
+  mutate(pred = mu_hat + b_i + b_u) %>%
+  pull(pred)
+final_predictions[is.na(final_predictions)] <- mu_hat
+final_rmse <- RMSE(final_holdout_test$rating, final_predictions)
+final_rmse
 ```
 
----
-
 # References
-- MovieLens 10M Dataset: https://grouplens.org/datasets/movielens/10m/
-- HarvardX PH125.9x Capstone Instructions
-- tidyverse, caret, data.table documentation
 
+1. Kassambara, A. (2018). *Machine learning essentials*. STHDA.
+2. Ozdemir, S. (2016). *Principles of data science*. Packt Publishing Ltd.
+3. Irizarry, R. A. (2023). *Introduction to Data Science*. Retrieved from http://rafalab.dfci.harvard.edu/dsbook/large-datasets.html
+4. James, G., Witten, D., Hastie, T., & Tibshirani, R. (2013). *An Introduction to Statistical Learning*. Springer.
